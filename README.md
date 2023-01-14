@@ -22,7 +22,7 @@ A MCU peripheral register watcher.
 - 推荐直接使用VSCode将一整个工程文件夹打开，并在这个Debug中运行程序
 
 ## 效果一览
-![总窗口界面及外设界面](/PeripheralWindow.jpg"TIMD in STMG4 HRTimer")
+![总窗口界面及外设界面]( /PeripheralWindow.jpg "TIMD in STMG4 HRTimer")
 
 ## 碎碎念
 - 其实Keil的各种相关功能都可以或者有机会通过Python实现，这样子或许能对单片机的操作拥有更高的自由度
