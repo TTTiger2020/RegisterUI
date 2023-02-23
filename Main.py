@@ -7,7 +7,7 @@ import swd
 # SVDName或者完整路径
 SVDNamePath = 'STM32G474xx.svd'
 BUTTONSIZE = 20
-
+MEMORYLEN = 10
 # 从SVD中提取到ListConfiguration列表
 
 # 从每一行中提取相关元素
@@ -94,6 +94,9 @@ def ListRegiMake( RNum, ListP, ListMeta ):
             pass
     return ListR
 
+def ListMemMake():
+    ListMem = []
+    return ListMem
 
 
 # Windows Peripheral外设的窗口, 两列：第一列为寄存器名，第二列为寄存器值
@@ -103,6 +106,13 @@ def WindowPMake(ListP,Pname):
         layout.append([sg.Button('%s'%ListP[i][0],key='RegisterName'+'%s'%i,size=BUTTONSIZE),sg.Button('%s'%ListP[i][5],key='RegisterValue'+'%s'%i,size=BUTTONSIZE)])
     return sg.Window(Pname, layout)
 
+# Windows Memory 显示某一个地址的窗口
+def WindowMemMake(ListMem):
+    layout = []
+    layout.append([sg.InputText(size=BUTTONSIZE),sg.Submit(key='MemoryAddrSubmit')])
+    for i in range(MEMORYLEN):
+        layout.append([sg.Button('0',key='MemoryAddr'+'%s'%i,size=BUTTONSIZE),sg.Button('0',key='AddrValue'+'%s'%i,size=BUTTONSIZE)])
+    return sg.Window('Memory', layout)
 
 # Windows Register寄存器详细每个bit位的窗口
 def WindowRMake(ListR,Rname,BitValue):
@@ -115,6 +125,7 @@ def WindowALLMake(PerName):
     layout = []
     for name in PerName:
         layout.append([sg.Button('%s'%name)])    
+    layout.append([sg.Button('***Memory***')])    
     return sg.Window('ALL', layout)
 # 写值窗口
 def WindowBWMake( bvalue,  bname):
@@ -126,9 +137,56 @@ def WindowRWMake( pvalue,  pname):
     return sg.Window( pname, layout )
 
 
+# Memory的窗口函数
+# 对一定长度的地址进行读写访问
+def MemoryRW(target):
+    # ListMeta, BaseAddr = PerpSvdExtract( PName )
+    ListMem = ListMemMake()
+    windowMem = WindowMemMake(ListMem)
+    MemoryBaseAddr=-1
+    while True:
+        eventMem, valueMem = windowMem.read(timeout=50)
+        if eventMem == 'MemoryAddrSubmit':
+            if nc.Str2Int(valueMem[0]) == -1:
+                pass
+            else:
+                MemoryBaseAddr=valueMem[0]
+                for i in range(MEMORYLEN):
+                    addrtmp=hex(i*4)
+                    listmemtmp=[]
+                    listmemtmp.append(nc.HexAdd(addrtmp,MemoryBaseAddr))
+                    listmemtmp.append([])
+                    ListMem.append(listmemtmp)
+        # Memory数值更新
+        if eventMem == sg.WINDOW_CLOSED:
+            break
+        if MemoryBaseAddr != -1:
+            for i in range(MEMORYLEN):
+                ListMem[i][1] = hex(swd.UlinkRead(ListMem[i][0], target))
+            # 按钮查询
+            for i in range(MEMORYLEN):
+                # 更新界面的地址值和数值
+                windowMem.find_element('MemoryAddr'+'%s'%i).update(hex(ListMem[i][0]))
+                windowMem.find_element('AddrValue'+'%s'%i).update(ListMem[i][1])
+                # 按下寄存器所存值
+                if 'AddrValue'+'%s'%i == eventMem:
+                    windowRW = WindowRWMake(ListMem[i][1], ListMem[i][0])
+                    eventRW, valueRW= windowRW.read()
+                    # 寄存器的值写入
+                    if eventRW:
+                        # 错误输入
+                        if nc.Str2Int(valueRW[0]) == -1:
+                            pass
+                        else:
+                            swd.UlinkWrite(ListMem[i][0], nc.Str2Int(valueRW[0]), target)
+                        windowRW.close()
+    windowMem.close()
+
+
+
 # 某一个外设的窗口函数
 # 可以直接对外设的值进行写的操作：窗口WindowPV，也可以按照bit位对外设进行写的操作
-def DisAndCon(PName, session, target):
+def DispAndCon(PName, target):
     ListMeta, BaseAddr = PerpSvdExtract( PName )
     ListP = ListPerpMake( PName, ListMeta )
     windowP = WindowPMake(ListP,PName)
@@ -142,7 +200,7 @@ def DisAndCon(PName, session, target):
         # 按钮查询
         for i in range(len(ListP)):
             # 更新数值
-            windowP.FindElement('RegisterValue'+'%s'%i).update(ListP[i][5])
+            windowP.find_element('RegisterValue'+'%s'%i).update(ListP[i][5])
             # 按下寄存器名字
             if 'RegisterName'+'%s'%i == eventP:
                 ListR = ListRegiMake(i, ListP, ListMeta)
@@ -195,6 +253,8 @@ while True:
         break
     for ii in PerName:
         if eventall == ii:
-            DisAndCon(ii, session, target)
+            DispAndCon(ii, target)
+    if eventall == '***Memory***':
+        MemoryRW(target)
 swd.UlinkClose(session)
 
